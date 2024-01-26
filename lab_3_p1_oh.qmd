@@ -82,14 +82,11 @@ plot(sesbania_sf %>% select(id))
 
 ## The analysis:
 
-Let's find the count of red sesbania observed locations in this dataset, by county, and then create a map of all CA counties using the fill color to indicate sesbania counts 
+Let's find the count of red sesbania observed locations in this dataset, by county, and then create a map of all CA counties using the fill color to indicate sesbania counts
 
 ### Pseudocode:
 
-put data into the same coordinate reference system
-merge/overlay/intersect/join the two datasets so for each point we know which county its in
-group by county and summarize counts of points per county
-ggplot, set fill color to counts
+put data into the same coordinate reference system merge/overlay/intersect/join the two datasets so for each point we know which county its in group by county and summarize counts of points per county ggplot, set fill color to counts
 
 ## Transform the CRS so records match counties
 
@@ -144,10 +141,7 @@ For the county with the greatest number of red sesbania records, make a map of t
 
 ### Pseudocode:
 
-find county with maximum records
-spatial join, keep point geometry (sesb_ca_sf)
-filter by that county
-plot just the county with the points overlaid
+find county with maximum records spatial join, keep point geometry (sesb_ca_sf) filter by that county plot just the county with the points overlaid
 
 ```{r}
 county_max <- sesb_counts_sf %>% 
@@ -179,8 +173,3 @@ tm_shape(ca_counties_sf) +
   tm_shape(sesbania_sf) +
   tm_dots()
 ```
-
-
-
-
-

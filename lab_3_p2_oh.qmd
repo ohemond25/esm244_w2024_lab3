@@ -1,0 +1,118 @@
+---
+title: "ESM 244 Lab 3 Part 2: Kriging"
+author: "Olivia Hemond"
+format: 
+  html:
+    code-fold: show
+    toc: true
+    number-sections: true
+    embed-resources: true
+editor: visual
+execute: 
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r setup}
+library(tidyverse)
+library(here)
+library(sf) # vector spatial data
+library(terra) # raster spatial data
+library(tidyterra) # rasters in ggplot
+### for geospatial stats:
+library(gstat)
+library(stars)
+```
+
+# Overview
+
+Create a variogram in R to understand the spatial dependence of ground water depth in California.
+
+# Read in the data!
+
+```{r}
+ca_counties_sf <- read_sf(here('data', 'ca_counties'), layer = 'CA_Counties_TIGER2016') %>%  # another way to identify file
+  janitor::clean_names() %>% 
+  select(name)
+
+ca_dgw_sf <- read_sf(here('data', 'ca_dgw', 'F2013_DBGS_Points_20150720_093252.gpkg')) %>% 
+  janitor::clean_names()
+```
+
+```{r}
+# st_crs(ca_counties_sf) # 3857
+# st_crs(ca_dgw_sf) # 4326
+ca_dgw_sf <- st_transform(ca_dgw_sf, 3857) %>% 
+  rename(depth = dgbs) # depth groundwater below surface = depth
+
+ggplot() +
+  geom_sf(data = ca_counties_sf) +
+  geom_sf(data = ca_dgw_sf, aes(color = depth))
+```
+
+# Focus on San Joaquin County
+
+```{r}
+sj_county_sf <- ca_counties_sf %>% 
+  filter(name == 'San Joaquin')
+
+sj_depth_sf <- ca_dgw_sf %>% 
+  st_intersection(sj_county_sf) # similar to join, but just tells which to keep. doesn't attach additional info like join does
+
+ggplot() +
+  geom_sf(data = sj_county_sf) +
+  geom_sf(data = sj_depth_sf, aes(color = depth)) +
+  theme_void()
+```
+
+# Spatial interpolation
+
+## Make a variogram
+
+```{r}
+sj_dgw_vgm <- gstat::variogram(depth ~ 1, data = sj_depth_sf) # tell it a formula for depth. if there were any covariates, would want to include them here. with ~ 1, that means make a model of depth just based upon depth around. if included another factor (i.e., elevation), you would include that as another variable
+
+# plot semivariance
+plot(sj_dgw_vgm)
+
+# want to fit a line to variogram to come up with function for our predictions
+vgm_fit <- gstat::fit.variogram(sj_dgw_vgm,
+                                model = vgm(model = 'Gau',  nugget = TRUE)) # helper function. indicates gaussian model
+          # nugget = TRUE means model won't assume nugget = 0. allows line to fit other points a bit better
+
+plot(sj_dgw_vgm, vgm_fit)
+
+attr(vgm_fit, 'SSErr') # sum of square error. can use to check model fit if comparing between others
+```
+
+```{r}
+# set up grid and interpolate at every point what the model predicts
+sj_grid <- st_bbox(sj_county_sf) %>%  # draw a box the same size as county
+  stars::st_as_stars(dx = 1000, dy = 1000) # 1 km grid
+
+dgw_krige <- krige(depth ~ 1, sj_depth_sf, sj_grid, model = vgm_fit) # take variogram model, take known well depth locations, and then predict depth at all locations on grid
+  # default: uses ordinary kriging
+
+plot(dgw_krige)
+```
+
+```{r}
+# convert to raster
+krige_rast <- dgw_krige %>% 
+  terra::rast() %>% 
+  setNames(c('pred', 'var'))
+
+#
+ggplot() +
+  tidyterra::geom_spatraster(data = krige_rast, aes(fill = pred)) +
+  geom_sf(data = sj_depth_sf, aes(fill = depth), shape = 21) +
+  geom_sf(data = sj_county_sf, color = 'black', fill = NA) +
+  scale_fill_gradient(low = 'blue', high = 'yellow') +
+  theme_void()
+```
+
+
+
+
+
